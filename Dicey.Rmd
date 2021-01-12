@@ -1,0 +1,149 @@
+---
+title: "Your Sword Versus My Dagger"
+output: html_document
+---
+
+Your Sword Versus My Dagger: Dice, Dungeons, and Dealing Damage
+
+Dicey Dungeons is a 2019 roguelike game that has the player rolling die in order to activate weapons that deal damage. Players take control of one of six characters, each with different starting equipment and gameplay mechanics. This notebook aims to compare the expected damage output per turn of two of the basic  weapons: the sword and the dagger. 
+
+##Sword Behavior
+
+The sword simply deals the amount of damage equal to the face value of the dice used to activate it. The sword can only be activated once per turn. Thus, optimal use of the sword would be activiating it with the maximum face value of your die roll. This is the behaviour I designed my sword function to emulate. 
+
+```{r}
+sword <- function(rolls){
+  output = 0
+  for(i in 1:ncol(rolls)){
+    roll = rolls[,i]
+    output = output + max(roll)
+  }
+  return(output)
+}
+```
+
+#Dagger Behavior
+
+The dagger also deals the amount of damage equal to the value of the dice used to activate it, but with some more stipulations. The face of the dice must be under 4, but as a trade-off this weapon can be used repeatedly in a single turn. The optimal use of the dagger would be activating it using all of your dice with a face value of three or less.
+
+```{r}
+dagger <- function(rolls){
+  output = 0
+  for(i in 1:ncol(rolls)){
+    roll = rolls[,i]
+    for(die in roll){
+      if(die <= 3){
+        output = output + die
+      }
+    }
+  }
+  return(output)
+}
+```
+
+##Simulation
+
+In a normal game of Dicey Dungeons, the player will begin with 2 dice and gain up to three additional dice by normally progressing through the game. It is also possible to get additional dice through special abilities. I simulated 10,000 turns for a player using up to 8 dice.
+
+```{r}
+set.seed(2020)
+library("ggplot2")
+
+sword_vec <- rep(0, 7)
+dagger_vec <- rep(0, 7)
+
+for(i in 2:8){
+  rolls = as.matrix(replicate(10000, sample(1:6, size = i, replace = TRUE)))
+  sword_vec[i - 1] <- sword(rolls)/10000
+  dagger_vec[i - 1] <- dagger(rolls)/10000
+  print(paste0(i, " Dice - Sword: ", sword(rolls)/10000, " Dagger: ", dagger(rolls)/10000))
+}
+```
+
+```{r}
+raw_df <- as.data.frame(cbind(2:8, sword_vec, dagger_vec))
+ggplot(raw_df, aes(x = V1)) + 
+  geom_line(aes(y = dagger_vec), color = "darkred") + 
+  geom_line(aes(y = sword_vec), color = "steelblue") +
+  geom_label()
+```
+
+
+Based on this simulation, the player must hold at least 6 dice for the dagger to have a better expected damage output than the sword.  
+
+##Upgraded Weapons 
+
+The dagger and sword can also be upgraded into their "plus" variants, dealing one additional point of damage each time they are activated. Because the dagger will be activated more often during normal combat, this should mean that the dagger's strength can surpass the sword's strength with a lower threshold of dice. To test this hypothesis, I repeated the experiment with the upgraded version of these weapons. 
+
+```{r}
+sword_plus <- function(rolls){
+  output = 0
+  for(i in 1:ncol(rolls)){
+    roll = rolls[,i]
+    output = output + max(roll) + 1
+  }
+  return(output)
+}
+```
+
+```{r}
+dagger_plus <- function(rolls){
+  output = 0
+  for(i in 1:ncol(rolls)){
+    roll = rolls[,i]
+    for(die in roll){
+      if(die <= 3){
+        output = output + die + 1
+      }
+    }
+  }
+  return(output)
+}
+```
+
+```{r}
+set.seed(2020)
+for(i in 2:9){
+  rolls = as.matrix(replicate(10000, sample(1:6, size = i, replace = TRUE)))
+  print(paste0(i, " Dice - Sword: ", sword_plus(rolls)/10000, " Dagger: ", dagger_plus(rolls)/10000))
+}
+```
+
+Indeed, the dagger now boasts a higher expected output than the sword after collecting five dice rather than six.
+
+##Frozen Status
+
+One status effect that can be inflicted on a player is "Frozen 1", which converts the highest face value in a set of rolls to 1 ("Frozen 2" applies this status to the two highest face values and so on). This is exclusively detrimental for the sword, which relies on the highest face value for its optimal damage output. However, this can potentially aid the dagger in the event that the highest die value is over three, since this allows the dagger to deal one extra point of damage that was not previously possible. 
+
+```{r}
+freeze <- function(rolls){
+  for(i in 1:ncol(rolls)){
+    roll = rolls[,i]
+    max_index <- which.max(roll)
+    rolls[max_index, i] <- 1
+  }
+  return(rolls)
+}
+```
+
+```{r}
+set.seed(2020)
+for(i in 2:9){
+  rolls = as.matrix(replicate(10000, sample(1:6, size = i, replace = TRUE)))
+  frozen_rolls <- freeze(rolls)
+  print(paste0(i, " Dice - Sword: ", sword(frozen_rolls)/10000, " Dagger: ", dagger(frozen_rolls)/10000))
+}
+```
+
+Predictably, it does not take long for the dagger to eclipse the sword in terms of expected damage. When using at least three dice, the dagger will always be expected to deal more damage than the sword. In fact, if a player is only using the dagger, having the "Frozen 1" status will result in a higher expected damage value than not having this status at all.
+
+```{r}
+set.seed(2020)
+for(i in 2:9){
+  rolls = as.matrix(replicate(10000, sample(1:6, size = i, replace = TRUE)))
+  frozen_rolls <- freeze(rolls)
+  print(paste0(i, " Dice - Sword: ", sword_plus(frozen_rolls)/10000, " Dagger: ", dagger_plus(frozen_rolls)/10000))
+}
+```
+
+Moreover, in the event that the player is using the upgraded version of these weapons, the dagger will always have a higher damage output than the sword when "Frozen 1" is applied!
